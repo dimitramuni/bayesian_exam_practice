@@ -1,0 +1,168 @@
+---
+title: "practice"
+author: "Dimitra Muni"
+date: "8/16/2020"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+# 2020-06-04
+
+## Help Code
+```{r}
+# Bayesian Learning Exam 2020-06-04
+# Run this file once during the exam to get all the required data and functions for the exam in working memory 
+# Author: Per Siden
+
+###############################
+########## Problem 1 ########## 
+############################### 
+
+###############################
+########## Problem 2 ########## 
+############################### 
+
+###############################
+########## Problem 3 ########## 
+############################### 
+
+# Reading the data from file
+load(file = 'titanic.RData')
+
+if("mvtnorm" %in% rownames(installed.packages()) == FALSE) {install.packages("mvtnorm")}
+if("msm" %in% rownames(installed.packages()) == FALSE) {install.packages("msm")}
+library(mvtnorm) # For mulitvariate normal
+library(msm) # For truncated normal
+
+BayesProbReg <- function(y, X, mu_0, tau, nIter){
+  # Gibbs sampling in probit regression using data augmentation:
+  #
+  # beta | tau ~ N(mu_0, tau^2*I)
+  #
+  # INPUTS:
+  #   y - n-by-1 vector with response data observations
+  #   X - n-by-nCovs matrix with covariates, first column should be ones if you want an intercept.
+  #   mu_0 - prior mean for beta
+  #   tau - prior standard deviation for beta
+  #   nIter - Number of samples from the posterior (iterations)
+  #
+  # OUTPUTS:
+  #   betaSample    - Posterior samples of beta.          nIter-by-nCovs matrix
+  
+  # Prior
+  nPara <- dim(X)[2] # this line was missing in the exam
+  priorCov <- tau^2*diag(nPara)
+  priorPrec <- solve(priorCov)
+  
+  # Compute posterior hyperparameters
+  n = length(y) # Number of observations
+  n1 = sum(y)
+  n0 = n - n1
+  nCovs = dim(X)[2] # Number of covariates
+  XX = t(X)%*%X
+  
+  # The actual sampling
+  betaSample = matrix(NA, nIter, nCovs)
+  u <- matrix(NA, n, 1)
+  beta <- solve(XX,crossprod(X,y)) # OLS estimate as initial value
+  for (i in 1:nIter){
+    
+    xBeta <- X%*%beta
+    
+    # Draw u | beta
+    u[y == 0] <- rtnorm(n = n0, mean = xBeta[y==0], sd = 1, lower = -Inf, upper = 0)
+    u[y == 1] <- rtnorm(n = n1, mean = xBeta[y==1], sd = 1, lower = 0, upper = Inf)
+    
+    # Draw beta | u
+    betaHat <- solve(XX,t(X)%*%u)
+    postPrec <- XX + priorPrec
+    postCov <- solve(postPrec)
+    betaMean <- solve(postPrec,XX%*%betaHat + priorPrec%*%mu_0)
+    beta <- t(rmvnorm(n = 1, mean = betaMean, sigma = postCov))
+    betaSample[i,] <- t(beta)
+    
+  }
+  
+  return(betaSample=betaSample)
+}
+
+
+###############################
+########## Problem 4 ########## 
+###############################
+```
+
+
+## Fish Classification
+
+```{r}
+f=dnorm(10,14,2*sqrt(17/16))*dnorm(250,mean=300,sd=50*sqrt(17/16))*.75
+m=dnorm(10,12,2*sqrt(5/4))*dnorm(250,mean=280,sd=50*sqrt(5/4))*.25
+f/(f+m)
+```
+
+
+## Binomial distribution
+
+```{r}
+#a
+
+theta=seq(0,1,0.001)
+unnormalized<- dbinom(33,50,theta)*(theta>0.3 & theta<0.7)
+plot(dbeta(seq(0,1,0.001),34,51-33),type='l',col=1)
+lines(unnormalized/(0.001*sum(unnormalized)),type='l',col=2)
+legend('topleft',c('using U(0,1) prior','using U(0.3,0.7) prior'),col=c(1,2),lty=2)
+
+x=33
+gridstep <- 0.001
+thetaGrid <- seq(0,1,gridstep)
+unnormpost <- dbinom(x,50,thetaGrid)*(thetaGrid>0.3)*(thetaGrid<0.7)
+postB <- (1/gridstep)*(unnormpost/sum(unnormpost))
+plot(thetaGrid,postB,type="l",main="Posteriors",xlab="theta",ylab="")
+lines(thetaGrid,dbeta(thetaGrid,x+1,51-x),type="l",col=2)
+legend(x = 0, y = 8, legend = c("Prior B","Prior A"), 
+       col = c("black","red"), lty = c(1,1), lwd = c(2,2), cex = 0.8)
+
+#b
+
+
+#theta=seq(0,1,0.001)
+#unnormalized<- dbinom(33,50,theta)*(theta>0.3 & theta<0.7)
+#priorBprob=sum(unnormalized/(0.001*sum(unnormalized)) <0.5)/length(theta)
+#priorAprob=sum(dbeta(theta,34,18)<0.5)
+
+
+x=33
+
+
+
+ProbA <- pbeta(0.5,x+1,51-x)
+ProbB=sum(postB[thetaGrid<=0.5]*0.001)
+```
+
+
+
+# 2018-11-01
+
+## Prediction and Decision
+```{r}
+y=c(1690, 1790,1760,1750)
+ybar=mean(y)
+x=rnorm(1000,mean = ybar,sd=50*sqrt(1+(1/4)))
+hist(x,50)
+m=c()
+for (i in 1:1000) {
+  
+ w= rnorm(52,mean = ybar,sd=50*sqrt(1+(1/4)) ) 
+ m=c(m,length(w[w>1850]))
+}
+
+hist(m)
+mean(m)
+
+```
+
