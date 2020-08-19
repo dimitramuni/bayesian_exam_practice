@@ -1,0 +1,108 @@
+---
+title: "ComputerSol"
+author: "Dimitra Muni - @dimmu472"
+date: "`r format(Sys.time(), '%d %B %Y')`"
+output: pdf_document
+subtitle: "732A91 Bayesian Learning, Linköping University"
+
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+
+# Patients 
+
+## (a)
+```{r}
+# (a)
+xgrid=seq(0,1,0.01)
+theta=dnorm(xgrid,mean=10000,sd=500)
+quantile(theta,probs = c(0.05,0.95))
+plot(theta/sum(theta),type='l')
+
+
+# alternate method
+theta=rnorm(10000,10000,500)
+cred_interval=quantile(theta,probs = c(0.05,0.95))
+hist(theta,50,xlim=c(8000,12000))
+abline(v=cred_interval[1],col=2)
+abline(v=cred_interval[2],col=4)
+legend('topright',c('lower 90%','upper 90%'),col=c(2,4),cex=0.8,lwd=2)
+cat('\n 90% equal tail credible interval \n',cred_interval)
+
+
+
+```
+
+## (b)
+
+```{r}
+pred=numeric(length = length(theta))
+for (i in 1:length(theta)) {
+  pred[i]=dpois(1,lambda = theta[i])
+}
+plot(pred,type = 'l' )
+sum(pred/sum(pred))
+```
+
+
+
+## (c)
+
+```{r}
+
+```
+
+
+# Regression
+
+## (a)
+
+```{r}
+
+# Model M1
+## Prior 
+mu_0 = rep(0,1)
+Omega_0 = 0.001*diag(1)
+v_0 = 1
+sigma2_0 = 10
+nIter=5000
+#No intercept term in M1 as per formulation
+M1_draws=BayesLinReg(y=muscle$Length,X=as.matrix(muscle[,2]),
+            mu_0, Omega_0, v_0, sigma2_0, nIter)
+
+
+# Model M1
+## Prior 
+mu_0 = rep(0,3)
+Omega_0 = 0.001*diag(3)
+v_0 = 1
+sigma2_0 = 10
+nIter=5000
+
+M2_draws=BayesLinReg(y=muscle$Length,X=model.matrix(~Conc+I(Conc**2),muscle),
+            mu_0, Omega_0, v_0, sigma2_0, nIter)
+
+```
+
+
+```{r}
+#For M1
+quantile(M1_draws$betaSample[,1],probs = c(0.025,0.975))
+
+#For M2
+
+quantile(M2_draws$betaSample[,1],probs = c(0.025,0.975))
+quantile(M2_draws$betaSample[,2],probs = c(0.025,0.975))
+quantile(M2_draws$betaSample[,3],probs = c(0.025,0.975))
+```
+
+
+## (b)
+
+
+
+

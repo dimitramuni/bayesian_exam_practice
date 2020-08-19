@@ -145,6 +145,11 @@ x=33
 
 ProbA <- pbeta(0.5,x+1,51-x)
 ProbB=sum(postB[thetaGrid<=0.5]*0.001)
+
+
+
+
+
 ```
 
 
@@ -153,23 +158,8 @@ ProbB=sum(postB[thetaGrid<=0.5]*0.001)
 
 ## Helpfile
 ```{r}
-# Bayesian Learning Exam 2018-11-01
-# Run this file once during the exam to get all the required data and functions for the exam in working memory 
-# Author: Per Siden
 
-###############################
-########## Problem 1 ########## 
-############################### 
-
-
-###############################
-########## Problem 2 ########## 
-############################### 
-
-# Reading the data from file
-#load(file = 'fish.RData')
-
-install.packages("mvtnorm")
+#install.packages("mvtnorm")
 library(mvtnorm)
 
 # Defining a function that simulates from the scaled inverse Chi-square distribution
@@ -226,18 +216,7 @@ BayesLinReg <- function(y, X, mu_0, Omega_0, v_0, sigma2_0, nIter){
   return(results = list(sigma2Sample = sigma2Sample, betaSample=betaSample))
 }
 
-###############################
-########## Problem 3 ########## 
-############################### 
 
-# No code or data for this problem
-
-###############################
-########## Problem 4 ########## 
-############################### 
-
-# Reading the data from file
-#load(file = 'weibull.RData')
 ```
 
 
@@ -255,8 +234,7 @@ for (i in 1:1000) {
   
  w= rnorm(52,mean = ybar,sd=50*sqrt(1+(1/4)) ) 
  
- m=c(m,sum(w>1850))
- 
+ m=c(m,sum(w>1850)) 
  
 }
 
@@ -268,8 +246,8 @@ mean(m)
 
 
 
-ExpectedLoss<-function(a, weekWeightYear){
-  EL = a + mean(colSums(weekWeightYear>1000*log(a)))
+ExpectedLoss<-function(a, w){
+  EL = a + mean(colSums(w>1000*log(a)))
   return(EL)
 }
 
@@ -278,11 +256,11 @@ EL = rep(NA,length(aGrid),1)
 count = 0
 for (a in aGrid){
   count = count + 1
-  EL[count] = ExpectedLoss(a, weekWeightYear)
+  EL[count] = ExpectedLoss(a, w)
 }
 plot(aGrid, EL, type = "l")
 aOpt = aGrid[which.min(EL)] # This is the optimal a
-points(x= aOpt, y = ExpectedLoss(a=aOpt, weekWeightYear), col = "red")
+points(x= aOpt, y = ExpectedLoss(a=aOpt, w), col = "red")
 aOpt
 
 ```
@@ -292,5 +270,177 @@ aOpt
 
 ```{r}
 
+# 2a
+result=BayesLinReg(y=fish$length,X=model.matrix(~age+temp+I(age**2)+I(temp**2)+I(age*temp),fish), mu_0=rep(0,6), Omega_0=0.01*diag(c(1,rep(5000,5))), v_0=1, sigma2_0=10000, nIter=5000)
+
+colMeans(result$betaSample)
+for (i in 1:6) {
+ cat('\n',i,quantile(result$betaSample[,i],prob=c(0.025,0.975)) )
+}
+# 2b
+median(sqrt(result$sigma2Sample))
+mean(sqrt(result$sigma2Sample))
+
+
+pred=numeric(length = 1000)
+bands=matrix(nrow=1000,ncol=2)
+for (i in 1:1000) {
+  f=result$betaSample%*%c(1,i,15,i**2,15**2,15*i)
+  pred[i]=mean(f)
+  bands[i,1]=as.numeric(quantile(f, prob=c(0.025,0.975))[1])
+  bands[i,2]=as.numeric(quantile(f, prob=c(0.025,0.975))[2])
+}
+
+
+plot(fish$age,fish$length)
+lines(1:1000,pred,type='l')
+lines(1:1000,bands[,1],col=2)
+lines(1:1000,bands[,2],col=2)
+
+
+
+n = 160
+agrid = seq(1,n)
+fmean = matrix(0,n,1)
+fbands = matrix(0,n,2)
+for(i in 1:n){
+
+  f = Results$betaSample %*% c(1,i,25,i^2,25^2,25*i)
+  fmean[i] = mean(f)
+  fbands[i,] = quantile(f,probs=c(.025,.975))
+}
+
+plot(fish_mod$age[1:11],fish_mod$length[1:11],type='p',xlab="age",ylab="length",
+     main="Posterior mean and bands",ylim=c(0,500))
+lines(agrid,fmean)
+lines(agrid,fbands[,1],col=2)
+lines(agrid,fbands[,2],col=2)
+```
+
+## Metropolis for Weibull
+
+```{r}
+#beta_initial=solve(t(X)%*%X)%*%t(X)%*%y
+X=weibull
+log_posterior=function(par,X=weibull){  #beta_val=beta_initial
+   #pred=X%*%beta_val
+   alpha=par[1]
+   beta=par[2]
+   n=length(X)
+   logpost=(n-2)*log(alpha)- ((n*alpha +2)*log(beta))-(sum(X^alpha)/(beta**alpha))+((alpha-1)*sum(log(X)))
+   
+ #  logpost<-ifelse(abs(logpost)==Inf,-10000,logpost) 
+
+   return(logpost)
+}
+intial_val=c(1,1)
+#log_posterior(beta_initial,X,y,10)
+opt=optim(par = c(1,1), fn  = log_posterior, method = c("L-BFGS-B"), control = list(fnscale = -1), hessian = TRUE)
+
+opt$par
+-solve(opt$hessian)
+#beta_initial=rep(0,8)
+x = weibull
+
+logPostWeibull <- function(param, x){
+  theta1 = param[1]
+  theta2 = param[2]
+  logPost =   sum(dweibull(x, shape = theta1, scale = theta2, log=TRUE)) +
+    - 2*log(theta1*theta2)
+  return(logPost)
+}
+
+initVal = c(1,1)
+optRes <- optim(par = initVal, fn  = logPostWeibull, gr = NULL, x, method = c("L-BFGS-B"),
+                lower = c(0.0001,0.0001), upper = c(Inf,Inf), control = list(fnscale = -1), hessian = TRUE)
+postMean <- optRes$par # This is the mean vector
+postCov <- -solve(optRes$hessian) # This is posterior covariance matrix
+
+print(postMean)
+print(postCov)
+
+
+
+posterior=mvtnorm::rmvnorm(10000,mean =t(opt$par),
+          sigma =-solve(opt$hessian))
+logPostFunc=log_posterior
+Jinv= -solve(optRes$hessian)
+
+
+
+
+nIter=10000
+theta=matrix(0, nrow = nIter, ncol = dim(posterior)[2])
+
+c=100
+theta[1,]=rep(1,dim(posterior)[2])
+#theta[1,]=runif(dim(posterior)[2])
+accprobvec <- rep(0,nIter)
+#theta=runif(nIter)
+for (i in 2:nIter) {
+
+
+theta_p=rmvnorm(1,mean=theta[2-1,],sigma = c*(Jinv))
+theta_p[theta_p<=0]=1e-6
+## alpha= min(1, (p(y|theta_p)*p(theta_p))/(p(y|theta[i-1])*p(theta[i-1])))
+
+py_theta_p_y=logPostFunc(as.vector(theta_p),X)
+
+py_theta_prev_y=logPostFunc(as.vector(theta[i-1,]),X)
+
+alpha=min(1,exp((py_theta_p_y)-(py_theta_prev_y)))  
+accprobvec[i]=alpha
+u=runif(1)
+
+if(u<alpha){theta[i,]=theta_p}
+else {theta[i,]=theta[i-1,]}
+                  }
+
+draws=theta
+#draws=RWMSampler(logPostFunc=log_posterior,nIter=10000,c=0.5,Jinv=Jinv)
+
+for (i in 1:dim(draws)[2]) {
+  plot(draws[501:nIter,i],type="l",col="red",
+       main=paste("Trace Plot of ",
+       colnames(X)[i]),ylab=colnames(X)[i],xlab="Iterations")
+  
+  plot(cummean(draws[501:nIter,i]),type="l",
+       col="blue",xlab="Iterations",
+       main=paste("Running Mean Plot of ",colnames(X)[i]),
+       ylab=paste("cum-mean",colnames(X)[i]))
+}
+
+mean(accprobvec)
+```
+
+# 2017-05-30
+
+```{r}
+# Reading data
+  # Loading the vector 'bids' into workspace
+bidsCounts <- table(bids)  # data2Counts is a frequency table of counts.
+
+# The posterior is Gamma(alphaGamma + sum(bids), betaGamma + n)
+alphaGamma = 1 # Prior is theta | data  ~ Gamma(alphaGamma, betaGamma)
+betaGamma = 1
+n = length(bids)
+thetaGrid <- seq(3,4,length = 1000)
+gammaPost = dgamma(thetaGrid, shape = alphaGamma + sum(bids), rate = betaGamma + n)
+plot(thetaGrid, gammaPost, type = "l", lwd = 2, main = "Posterior for mean in Poisson model for bids", 
+     xlab = expression(theta), ylab = 'Density')
+
+
+xGrid = seq(min(bids),max(bids))  # A grid used as input to GibbsMixPois.R over which the mixture density is evaluated.
+dataDistr = bidsCounts/sum(bidsCounts)
+
+# There are two ways of doing this (of which the second one is more correct, but both are ok here):
+
+# i) First approach - compute the Poisson distribution over xGrid the posterior mean of theta.
+poisDistr = dpois(xGrid, lambda = mean(bids))
+plot(xGrid, dataDistr, type = "o", lwd = 3, col = "black", pch = 'o', cex = 0.6, 
+     ylim = c(0,0.22), main = "Fitted models")
+lines(xGrid, poisDistr, type = "o", lwd = 3, col = "red", pch = 'o', cex = 0.6)
+legend(x = 6, y = 0.2, legend = c("Data", "Poisson "), 
+       col = c("black","red"), lty = c(1,1), lwd = c(3,3), cex = 0.8)
 ```
 
