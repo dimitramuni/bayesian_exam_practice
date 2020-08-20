@@ -9,6 +9,8 @@ subtitle: "732A91 Bayesian Learning, Linköping University"
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
+library(MASS)
+library(mvtnorm)
 ```
 
 
@@ -18,19 +20,10 @@ knitr::opts_chunk$set(echo = TRUE)
 ## (a)
 ```{r}
 # (a)
-xgrid=seq(0,1,0.01)
-theta=dnorm(xgrid,mean=10000,sd=500)
-quantile(theta,probs = c(0.05,0.95))
-plot(theta/sum(theta),type='l')
 
 
-# alternate method
 theta=rnorm(10000,10000,500)
 cred_interval=quantile(theta,probs = c(0.05,0.95))
-hist(theta,50,xlim=c(8000,12000))
-abline(v=cred_interval[1],col=2)
-abline(v=cred_interval[2],col=4)
-legend('topright',c('lower 90%','upper 90%'),col=c(2,4),cex=0.8,lwd=2)
 cat('\n 90% equal tail credible interval \n',cred_interval)
 
 
@@ -41,11 +34,9 @@ cat('\n 90% equal tail credible interval \n',cred_interval)
 
 ```{r}
 pred=numeric(length = length(theta))
-for (i in 1:length(theta)) {
-  pred[i]=dpois(1,lambda = theta[i])
-}
-plot(pred,type = 'l' )
-sum(pred/sum(pred))
+sum(dpois(1,lambda = theta))
+
+table(pred)
 ```
 
 
@@ -63,6 +54,64 @@ sum(pred/sum(pred))
 
 ```{r}
 
+
+# Defining a function that simulates from the scaled inverse Chi-square distribution
+rScaledInvChi2 <- function(n, df, scale){
+  return((df*scale)/rchisq(n,df=df))
+}
+BayesLinReg <- function(y, X, mu_0, Omega_0, v_0, sigma2_0, nIter){
+  # Direct sampling from a Gaussian linear regression with conjugate prior:
+  #
+  # beta | sigma2 ~ N(mu_0, sigma2*inv(Omega_0))
+  # sigma2 ~ Inv-Chi2(v_0,sigma2_0)
+  # 
+  # Author: Mattias Villani, IDA, Linkoping University. http://mattiasvillani.com
+  #
+  # INPUTS:
+  #   y - n-by-1 vector with response data observations
+  #   X - n-by-nCovs matrix with covariates, first column should be ones if you want an intercept.
+  #   mu_0 - prior mean for beta
+  #   Omega_0  - prior precision matrix for beta
+  #   v_0      - degrees of freedom in the prior for sigma2
+  #   sigma2_0 - location ("best guess") in the prior for sigma2
+  #   nIter - Number of samples from the posterior (iterations)
+  #
+  # OUTPUTS:
+  #   results$betaSample     - Posterior sample of beta.     nIter-by-nCovs matrix
+  #   results$sigma2Sample   - Posterior sample of sigma2.   nIter-by-1 vector
+  
+  # Compute posterior hyperparameters
+  n = length(y) # Number of observations
+  nCovs = dim(X)[2] # Number of covariates
+  XX = t(X)%*%X
+  betaHat <- solve(XX,t(X)%*%y)
+  Omega_n = XX + Omega_0
+  mu_n = solve(Omega_n,XX%*%betaHat+Omega_0%*%mu_0)
+  v_n = v_0 + n
+  sigma2_n = as.numeric((v_0*sigma2_0 + ( t(y)%*%y + t(mu_0)%*%Omega_0%*%mu_0 - t(mu_n)%*%Omega_n%*%mu_n))/v_n)
+  invOmega_n = solve(Omega_n)
+  
+  # The actual sampling
+  sigma2Sample = rep(NA, nIter)
+  betaSample = matrix(NA, nIter, nCovs)
+  for (i in 1:nIter){
+    
+    # Simulate from p(sigma2 | y, X)
+    sigma2 = rScaledInvChi2(n=1, df = v_n, scale = sigma2_n)
+    sigma2Sample[i] = sigma2
+    
+    # Simulate from p(beta | sigma2, y, X)
+    beta_ = rmvnorm(n=1, mean = mu_n, sigma = sigma2*invOmega_n)
+    betaSample[i,] = beta_
+    
+  }
+  return(results = list(sigma2Sample = sigma2Sample, betaSample=betaSample))
+}
+```
+
+
+```{r}
+
 # Model M1
 ## Prior 
 mu_0 = rep(0,1)
@@ -71,7 +120,7 @@ v_0 = 1
 sigma2_0 = 10
 nIter=5000
 #No intercept term in M1 as per formulation
-M1_draws=BayesLinReg(y=muscle$Length,X=as.matrix(muscle[,2]),
+M1_draws=BayesLinReg(y=muscle$Length,X=as.matrix(muscle$Conc),
             mu_0, Omega_0, v_0, sigma2_0, nIter)
 
 
@@ -103,6 +152,119 @@ quantile(M2_draws$betaSample[,3],probs = c(0.025,0.975))
 
 ## (b)
 
+```{r}
 
+xgrid=seq(0,5,0.01) 
+for (i in 1:5000) {
+  M1_length=M1_draws$betaSample[i,1]%*%muscle$Conc + rnorm(1,mean =0 ,sd=sqrt(M1_draws$betaSample[i,1]))
+
+}
+
+
+
+plot(x=muscle$Conc,y=muscle$Length)
+```
+
+
+# Delivery Time
+
+## (a) On Paper
+
+## (b) 
+
+
+```{r}
+load("~/bayesian_exam_practice/delivery.RData")
+n=length(delivery)
+alpha=2
+beta=2
+
+post_modes=numeric(length = 3)
+post_lambda=matrix(nrow = 1000,ncol=3)
+##k=0.5
+k=0.5
+x=delivery
+post_lambda[,1]=1/rgamma(1000,alpha+n,beta+sum(x**k))
+d=density(post_lambda[,1])
+cat('For k=0.5,Posterior mode using density() ',d$x[which.max(d$y)])
+post_modes[1]=d$x[which.max(d$y)]
+#theoretical posterior model= beta/(alpha+1)
+cat('\nFor k=0.5,Theoretical Posterior mode',d$x[which.max(d$y)])
+
+k=1.5
+x=delivery
+post_lambda[,2]=1/rgamma(1000,alpha+n,beta+sum(x**k))
+d=density(post_lambda[,2])
+cat('\nFor k=1.5,Posterior mode using density() ',d$x[which.max(d$y)])
+post_modes[2]=d$x[which.max(d$y)]
+#theoretical posterior model= beta/(alpha+1)
+cat('\nFor k=1.5,Theoretical Posterior mode',d$x[which.max(d$y)])
+
+
+k=2.5
+x=delivery
+post_lambda[,3]=1/rgamma(1000,alpha+n,beta+sum(x**k))
+d=density(post_lambda[,3])
+cat('\nFor k=2.5,Posterior mode using density() ',d$x[which.max(d$y)])
+post_modes[3]=d$x[which.max(d$y)]
+#theoretical posterior model= beta/(alpha+1)
+cat('\nFor k=2.5,Theoretical Posterior mode',d$x[which.max(d$y)])
+
+```
+
+
+## (c) 
+
+```{r}
+hist(delivery,freq = FALSE,xlim=c(0,40))
+hist(post_lambda[,1],add=T,col='dark grey',freq = FALSE)
+abline(v=post_modes[1],col='red',lwd=4)
+hist(post_lambda[,2],add=T,col=3,freq = FALSE)
+abline(v=post_modes[2],col='blue',lwd=4)
+hist(post_lambda[,3],add=T,col=4,freq = FALSE)
+abline(v=post_modes[3],col='dark green',lwd=4)
+legend('topright',c('k=0.5','k=1.5','k=2.5'),col=c('red','blue','dark green'),lwd=4)
+```
+
+From the figures above, k=1.5 seems to give better fit than k=0.5 and k=2.5, however the denity is has lower variance than the original data.
+
+
+# More Delivery Times
+
+## (a) On paper
+
+## (b)
+
+```{r}
+logpostk=function(x,k,alpha,beta){
+ n=length(x)
+ log_prior_k=dexp(k,rate=1,log = TRUE)
+ lambdas=1/dgamma(x,alpha,beta)
+ log_prior_lambda=log(lambdas)
+ log_likelihood= n*log(k)-(n*log_prior_lambda)+(n*(k-1)*sum(log(x)))-(sum(x**k)/lambdas)
+ return(sum(log_prior_k+log_prior_lambda+log_likelihood))
+}
+
+xgrid=seq(0,3,0.1)
+posterior_dist=c()
+for (k in xgrid) {
+  posterior_dist=c(posterior_dist,logpostk(x=delivery,k,alpha = 2,beta = 2))
+  
+}
+posterior_dist[abs(posterior_dist)==Inf]=-100000
+
+plot(x=xgrid,y=posterior_dist/sum(posterior_dist),type='l',xlab='k',ylab='normalized posterior')
+```
+
+## (c)
+
+```{r}
+normalized=posterior_dist/sum(posterior_dist)
+band=quantile(normalized,probs = c(0.025,0.975))
+plot(xgrid,normalized)
+abline(v=band[1])
+abline(v=band[2])
+
+```
 
 
